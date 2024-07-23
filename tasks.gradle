@@ -1,0 +1,49 @@
+task deploy {
+    dependsOn 'smartbuild'
+    finalizedBy "copyWarToVolume"
+    doLast {
+        def propertiesFile = file('WebContent/WEB-INF/Openbravo.properties')
+        def fileContent = propertiesFile.text
+        // Open gradle.properties and obtain settings
+        def properties = new Properties()
+        file('gradle.properties').withInputStream { input ->
+            properties.load(input)
+        }
+        // Replace the database URL
+        def port = properties.property("bbdd.port")
+        def hostUrl = "localhost"
+        def destUrl = isBBDDEnabled ? "db" : "host.internal.docker"
+
+        fileContent = fileContent.replace('bbdd.url=jdbc:postgresql://' + hostUrl + '\\:' + port , 'bbdd.url=jdbc:postgresql://' + destUrl + '\\:5432')
+        propertiesFile.text = fileContent
+        delete file('lib/etendo.war')
+    }
+}
+
+task copyWarToVolume {
+    dependsOn 'antWar'
+    doLast {
+        copy {
+            from "./lib/etendo.war"
+            into "${buildDir}/compose/volumes/tomcat/webapps"
+            eachFile { println "Copying $it" }
+        }
+        def indexHtmlContent = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta http-equiv="refresh" content="0; URL='/etendo'" />
+                <title>Redirecting...</title>
+            </head>
+            <body>
+                <p>If you are not redirected automatically, follow this <a href="/etendo">link to /etendo</a>.</p>
+            </body>
+            </html>
+        """
+        file("${buildDir}/compose/volumes/tomcat/webapps/ROOT").mkdirs()
+
+        def indexFile = file("${buildDir}/compose/volumes/tomcat/webapps/ROOT/index.html")
+        indexFile.write(indexHtmlContent)
+    }
+}
+

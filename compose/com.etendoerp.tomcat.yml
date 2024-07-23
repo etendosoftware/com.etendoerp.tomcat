@@ -1,0 +1,12 @@
+services:
+  tomcat:
+    image: tomcat:9.0.91-jdk17-corretto
+    ports:
+      - "8080:8080"
+      - "8009:8009"
+    networks:
+      - etendo
+    volumes:
+      - ./volumes/tomcat/webapps:/usr/local/tomcat/webapps
+    environment:
+      - JPDA_OPTS="-agentlib:jdwp=transport=dt_socket,address=8009,server=y,suspend=n"
