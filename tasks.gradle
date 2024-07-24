@@ -4,13 +4,7 @@ task deploy {
     doLast {
         def propertiesFile = file('WebContent/WEB-INF/Openbravo.properties')
         def fileContent = propertiesFile.text
-        // Open gradle.properties and obtain settings
-        def properties = new Properties()
-        file('gradle.properties').withInputStream { input ->
-            properties.load(input)
-        }
-        // Replace the database URL
-        def port = properties.property("bbdd.port")
+        def port = project.property("bbdd.port")
         def hostUrl = "localhost"
         def destUrl = isBBDDEnabled ? "db" : "host.internal.docker"
 
