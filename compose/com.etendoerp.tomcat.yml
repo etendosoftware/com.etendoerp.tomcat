@@ -6,6 +6,8 @@ services:
       - "${TOMCAT_DEBUG_PORT}:8000"
     networks:
       - etendo
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ${VOLUMES_PATH}/tomcat/webapps:/usr/local/tomcat/webapps
     environment:
