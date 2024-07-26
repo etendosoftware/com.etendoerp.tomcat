@@ -7,7 +7,7 @@
 */
 
 group          = "com.etendoerp"
-version        = "0.0.3"
+version        = "0.0.5"
 description    = "Module to add docker container utils to easy contained manage"
 ext.artifact   = "tomcat"
 ext.repository = "https://maven.pkg.github.com/etendosoftware/com.etendoerp.platform.extensions"
