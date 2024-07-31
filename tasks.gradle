@@ -9,7 +9,6 @@ task tomcatDeploy {
         def fileContent = propertiesFile.text
         fileContent = fileContent.replaceAll(/bbdd.url=.*/, "bbdd.url=jdbc:postgresql://${destUrl}:${port}")
         propertiesFile.write(fileContent)
-        //
         delete file("lib/${contextName}.war")
     }
 }
