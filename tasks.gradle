@@ -1,43 +1,92 @@
-task deploy {
-    dependsOn 'smartbuild'
+task tomcatDeploy {
     finalizedBy "copyWarToVolume"
     doLast {
+        def contextName = project.property("context.name")
+        def destUrl = isBBDDEnabled ? "db" : "host.docker.internal"
+        def port = isBBDDEnabled ? "5432" : project.property("bbdd.port")
+        // Update Openbravo.properties
         def propertiesFile = file('WebContent/WEB-INF/Openbravo.properties')
         def fileContent = propertiesFile.text
-        def port = project.property("bbdd.port")
-        def hostUrl = "localhost"
-        def destUrl = isBBDDEnabled ? "db" : "host.internal.docker"
-
-        fileContent = fileContent.replace('bbdd.url=jdbc:postgresql://' + hostUrl + '\\:' + port , 'bbdd.url=jdbc:postgresql://' + destUrl + '\\:5432')
-        propertiesFile.text = fileContent
-        delete file('lib/etendo.war')
+        fileContent = fileContent.replaceAll(/bbdd.url=.*/, "bbdd.url=jdbc:postgresql://${destUrl}:${port}")
+        propertiesFile.write(fileContent)
+        delete file("lib/${contextName}.war")
     }
 }
 
 task copyWarToVolume {
     dependsOn 'antWar'
     doLast {
-        copy {
-            from "./lib/etendo.war"
-            into "${buildDir}/compose/volumes/tomcat/webapps"
-            eachFile { println "Copying $it" }
-        }
+        def contextName = project.property("context.name")
+        executeDockerComposeCommand("cp ./lib/${contextName}.war tomcat:/usr/local/tomcat/webapps/${contextName}.war")
         def indexHtmlContent = """
             <!DOCTYPE html>
             <html>
             <head>
-                <meta http-equiv="refresh" content="0; URL='/etendo'" />
+                <meta http-equiv="refresh" content="0; URL='/${contextName}'" />
                 <title>Redirecting...</title>
             </head>
             <body>
-                <p>If you are not redirected automatically, follow this <a href="/etendo">link to /etendo</a>.</p>
+                <p>If you are not redirected automatically, follow this <a href="/${contextName}">link to /${contextName}</a>.</p>
             </body>
             </html>
         """
-        file("${buildDir}/compose/volumes/tomcat/webapps/ROOT").mkdirs()
+        file("${buildDir}/compose/ROOT").mkdirs()
 
-        def indexFile = file("${buildDir}/compose/volumes/tomcat/webapps/ROOT/index.html")
+        def indexFile = file("${buildDir}/compose/ROOT/index.html")
         indexFile.write(indexHtmlContent)
+        executeDockerComposeCommand("cp $buildDir/compose/ROOT tomcat:/usr/local/tomcat/webapps/ROOT")
     }
 }
 
+task tomcatDeleteWar {
+    doLast {
+        def contextName = project.property("context.name")
+        executeDockerComposeCommand("exec tomcat rm -rf /usr/local/tomcat/webapps/*.war")
+    }
+}
+
+task tomcatStart {
+    doLast {
+        executeDockerComposeCommand("up -d tomcat")
+    }
+}
+
+task tomcatStop {
+    doLast {
+        executeDockerComposeCommand("stop tomcat")
+    }
+}
+
+task "tomcat.env.file" {
+    description = 'Generates the .env file for Tomcat'
+    group = 'Docker'
+
+    doLast {
+        def props = envFile()
+        def env = props.envFile
+        def tomcatPort = project.hasProperty("docker_com.etendoerp.tomcat_port") ? project.property("docker_com.etendoerp.tomcat_port").toString() : "8080"
+        def tomcatDebugPort = project.hasProperty("docker_com.etendoerp.tomcat_debug") ? project.property("docker_com.etendoerp.tomcat_debug").toString() : "8009"
+        env.withWriterAppend { writer ->
+            writer.write("TOMCAT_PORT=${tomcatPort}\n")
+            writer.write("TOMCAT_DEBUG_PORT=${tomcatDebugPort}\n")
+        }
+    }
+}
+
+afterEvaluate {
+    if(isTomcatEnabled) {
+        tasks.named("smartbuild").configure { task ->
+            task.dependsOn("tomcatStart")
+            task.finalizedBy("tomcatDeploy")
+        }
+        tasks.named("update.database").configure { task ->
+            task.dependsOn("tomcatStop")
+        }
+        tasks.named("install").configure { task ->
+            task.dependsOn("tomcatStop")
+        }
+        tasks.named("generateEnvFile").configure { task ->
+            task.finalizedBy("tomcat.env.file")
+        }
+    }
+}
