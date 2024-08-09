@@ -1,3 +1,7 @@
 /build/
 etendo.artifact.properties
 sonar-project.properties
+
+build/
+!build/classes/
+etendo.artifact.properties
