@@ -1,5 +1,6 @@
 task tomcatDeploy {
     finalizedBy "copyWarToVolume"
+    dependsOn "tomcatStart"
     doLast {
         def contextName = project.property("context.name")
         def destUrl = isBBDDEnabled ? "db" : "host.docker.internal"
@@ -74,9 +75,11 @@ task "tomcat.env.file" {
 }
 
 afterEvaluate {
+    if(!ext.has("isTomcatEnabled")) {
+        return
+    }
     if(isTomcatEnabled) {
         tasks.named("smartbuild").configure { task ->
-            task.dependsOn("tomcatStart")
             task.finalizedBy("tomcatDeploy")
         }
         tasks.named("update.database").configure { task ->
