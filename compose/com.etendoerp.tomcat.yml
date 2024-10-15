@@ -11,6 +11,7 @@ services:
     volumes:
       - ${VOLUMES_PATH}/tomcat/webapps:/usr/local/tomcat/webapps
       - ${ATTACH_PATH}:${ATTACH_PATH}
+      - ${SOURCE_PATH}:${SOURCE_PATH}
     environment:
       - JPDA_OPTS="-agentlib:jdwp=transport=dt_socket,address=*:8000,server=y,suspend=n"
     command: ["catalina.sh", "jpda", "run"]
