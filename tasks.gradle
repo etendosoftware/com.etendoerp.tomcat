@@ -103,6 +103,7 @@ afterEvaluate {
         }
         tasks.named("compile.complete.deploy").configure { task ->
             task.dependsOn("tomcatDeleteWar")
+            task.finalizedBy("tomcatDeploy")
         }
         tasks.named("update.database").configure { task ->
             task.dependsOn("tomcatStop")
