@@ -74,12 +74,35 @@ task "tomcat.env.file" {
     }
 }
 
+/*
+ * This script configures tasks related to Tomcat deployment in a Gradle build.
+ * 
+ * After the project is evaluated, it checks if the `isTomcatEnabled` property is set.
+ * If `isTomcatEnabled` is true, it configures the following tasks:
+ * 
+ * - `smartbuild`: Finalizes with `tomcatDeploy`.
+ * - `compile.complete`: Depends on `tomcatDeleteWar`.
+ * - `compile.complete.deploy`: Depends on `tomcatDeleteWar`.
+ * - `update.database`: Depends on `tomcatStop`.
+ * - `install`: Depends on `tomcatStop`.
+ * - `generateEnvFile`: Finalizes with `tomcat.env.file`.
+ * 
+ * These configurations ensure that the appropriate Tomcat tasks are executed
+ * during the build process, depending on the state of `isTomcatEnabled`.
+ */
 afterEvaluate {
-    if(!ext.has("isTomcatEnabled")) {
+    if (!ext.has("isTomcatEnabled")) {
         return
     }
-    if(isTomcatEnabled) {
+    if (isTomcatEnabled) {
         tasks.named("smartbuild").configure { task ->
+            task.finalizedBy("tomcatDeploy")
+        }
+        tasks.named("compile.complete").configure { task ->
+            task.dependsOn("tomcatDeleteWar")
+        }
+        tasks.named("compile.complete.deploy").configure { task ->
+            task.dependsOn("tomcatDeleteWar")
             task.finalizedBy("tomcatDeploy")
         }
         tasks.named("update.database").configure { task ->
