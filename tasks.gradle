@@ -41,8 +41,16 @@ task copyWarToVolume {
 
 task tomcatDeleteWar {
     doLast {
-        def contextName = project.property("context.name")
-        executeDockerComposeCommand("exec tomcat rm -rf /usr/local/tomcat/webapps/*.war")
+        try {
+            def result = executeDockerComposeCommand("ps -q tomcat")
+            if (result) {
+                executeDockerComposeCommand("exec tomcat rm -rf /usr/local/tomcat/webapps/*.war")
+            } else {
+                logger.warn("Tomcat is not running.")
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to check Tomcat status or delete WAR files: ${e.message}")
+        }
     }
 }
 
