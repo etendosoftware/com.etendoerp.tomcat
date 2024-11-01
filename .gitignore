@@ -4,3 +4,6 @@ etendo.artifact.properties
 build/
 !build/classes/
 .gradle/
+build/
+!build/classes/
+etendo.artifact.properties
