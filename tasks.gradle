@@ -31,11 +31,13 @@ task copyWarToVolume {
             </body>
             </html>
         """
-        file("${buildDir}/compose/ROOT").mkdirs()
+        def composeRootDir = layout.buildDirectory.dir("compose/ROOT").get().asFile
+        composeRootDir.mkdirs()
 
-        def indexFile = file("${buildDir}/compose/ROOT/index.html")
+        def indexFile = new File(composeRootDir, "index.html")
         indexFile.write(indexHtmlContent)
-        executeDockerComposeCommand("cp $buildDir/compose/ROOT tomcat:/usr/local/tomcat/webapps/ROOT")
+
+        executeDockerComposeCommand("cp ${composeRootDir} tomcat:/usr/local/tomcat/webapps/ROOT")
     }
 }
 

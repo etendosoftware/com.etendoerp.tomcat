@@ -1,6 +1,6 @@
 services:
   tomcat:
-    image: tomcat:9.0.91-jdk17-corretto
+    image: tomcat:9.0.98-jdk17-corretto
     env_file: ".env"
     ports:
       - "${TOMCAT_PORT}:8080"
