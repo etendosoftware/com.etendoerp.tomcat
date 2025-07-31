@@ -15,5 +15,5 @@ services:
       - ${SOURCE_PATH}:${SOURCE_PATH}
     environment:
       - JPDA_OPTS="-agentlib:jdwp=transport=dt_socket,address=*:8000,server=y,suspend=n"
-      - CATALINA_OPTS=${TOMCAT_CATALINA_OPTS:-""}
+      - CATALINA_OPTS=${TOMCAT_CATALINA_OPTS}
     command: ["catalina.sh", "jpda", "run"]
