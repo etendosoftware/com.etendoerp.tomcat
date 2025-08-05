@@ -6,7 +6,7 @@
 <!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <AD_ORG_ID><![CDATA[0]]></AD_ORG_ID>
 <!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <ISACTIVE><![CDATA[Y]]></ISACTIVE>
 <!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <NAME><![CDATA[Dockerized Tomcat Service]]></NAME>
-<!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <VERSION><![CDATA[2.2.0]]></VERSION>
+<!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <VERSION><![CDATA[2.3.0]]></VERSION>
 <!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <DESCRIPTION><![CDATA[Dockerized Tomcat deploy]]></DESCRIPTION>
 <!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <HELP><![CDATA[This module dockerizes the Tomcat service and is distributed as an Etendo module. It provides a standardized way to run and manage Tomcat within Docker containers, ensuring seamless integration with the Etendo environment.]]></HELP>
 <!--EE80BB65DDE548559AEF6C4AC41E02D0-->  <TYPE><![CDATA[M]]></TYPE>
