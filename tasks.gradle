@@ -75,10 +75,8 @@ task "tomcat.env.file" {
     doLast {
         def props = envFile()
         def env = props.envFile
-        def tomcatPort = project.hasProperty("docker_com.etendoerp.tomcat_port") ? project.property("docker_com.etendoerp.tomcat_port").toString() : "8080"
         def tomcatDebugPort = project.hasProperty("docker_com.etendoerp.tomcat_debug") ? project.property("docker_com.etendoerp.tomcat_debug").toString() : "8009"
         env.withWriterAppend { writer ->
-            writer.write("TOMCAT_PORT=${tomcatPort}\n")
             writer.write("TOMCAT_DEBUG_PORT=${tomcatDebugPort}\n")
         }
     }

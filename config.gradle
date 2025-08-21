@@ -1,0 +1,25 @@
+// modules/com.etendoerp.tomcat/config.gradle
+
+/**
+ * Interactive configuration for Tomcat Module
+ */
+
+config {
+    isTomcatEnabled {
+        description = "Enables the dockerized Tomcat - Default: false"
+        value = "false"
+        name = "docker_com.etendoerp.tomcat"
+        sensitive = false
+        required = false
+        group = "Tomcat"
+    }
+
+    tomcatDebugPort {
+        description = "Tomcat debug port for remote JVM debugging - Default: 8009"
+        value = "8009"
+        name = "docker_com.etendoerp.tomcat_debug"
+        sensitive = false
+        required = false
+        group = "Tomcat"
+    }
+}
