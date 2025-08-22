@@ -17,3 +17,9 @@ services:
       - JPDA_OPTS="-agentlib:jdwp=transport=dt_socket,address=*:8000,server=y,suspend=n"
       - CATALINA_OPTS=${TOMCAT_CATALINA_OPTS}
     command: ["catalina.sh", "jpda", "run"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${TOMCAT_PORT}/"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 45s
