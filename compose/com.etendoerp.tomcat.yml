@@ -14,17 +14,16 @@ services:
       - ${ATTACH_PATH}:${ATTACH_PATH}
       - ${SOURCE_PATH}:${SOURCE_PATH}
     environment:
-      JAVA_OPTS: -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC
       JPDA_OPTS: "-agentlib:jdwp=transport=dt_socket,address=*:8000,server=y,suspend=n"
       CATALINA_OPTS: ${TOMCAT_CATALINA_OPTS}
     command: ["catalina.sh", "jpda", "run"]
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: 512M
+          cpus: "${TOMCAT_CPU_LIMIT:-${BASE_TOMCAT_CPU_LIMIT:-1}}"
+          memory: "${TOMCAT_MEMORY_LIMIT:-${BASE_TOMCAT_MEMORY_LIMIT:-256M}}"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${TOMCAT_PORT}/"]
+      test: ["CMD", "curl", "-f", "http://localhost:${TOMCAT_PORT}/${CONTEXT_NAME}/security/Login"]
       interval: 10s
       timeout: 10s
       retries: 60
