@@ -1,0 +1,448 @@
+def updateBuildStatus(status, description, module, token, commit, buildUrl, context) {
+  sh """
+  ./jenkins-pipelines/utils/repo-update-scripts/build-update-github.sh ${module} ${status} "${description}" ${token} ${commit} ${buildUrl} "${context}"
+  """
+}
+
+def sendMailNotification(to, subject, moduleUrl, packageName, commitHash, commitAuthorName, commitAuthorEmail) {
+  def body = """
+    <html>
+        <head>
+            <style>
+                body { font-family: 'Arial', sans-serif; }
+                .header { font-size: 16px; font-weight: bold; color: #333; }
+            </style>
+        </head>
+        <body>
+            <p><em>${new Date()}</em></p>
+            <p>__________________________________________________________</p>
+
+            <h2 class="header">${subject}</h2>
+
+            <p>
+                <strong>Commit:</strong> <a href="${moduleUrl}/commits/${commitHash}">${moduleUrl}/commits/${commitHash}</a><br />
+                <strong>Author:</strong> ${commitAuthorName} (${commitAuthorEmail})
+            </p>
+            <p>
+                The build has failed unexpectedly.<br />
+                💡 This build was on the ${packageName} module.<br />
+                To more information on the failing run visit:<br />
+                <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
+            </p>
+            <p>__________________________________________________________</p>
+        </body>
+    </html>
+  """
+  mail to: to,
+    subject: "${subject} - ${currentBuild.fullDisplayName}",
+    mimeType: 'text/html',
+    body: body
+}
+
+pipeline {
+  options {
+    disableConcurrentBuilds()
+  }
+
+  environment {
+    CONTEXT_NAME    = 'etendo'
+    BBDD_SID        = 'etendo'
+    BBDD_PORT       = '5432'
+    BBDD_SYSTEMUSER = 'postgres'
+    BBDD_SYSTEMPASS = 'syspass'
+    BBDD_USER       = 'tad'
+    BBDD_PASSWORD   = 'tad'
+    TOMCAT_PORT     = '8085'
+    NEXUS_USER      = credentials('nexus-admin-user')
+    NEXUS_PASSWORD  = credentials('nexus-admin-passwd')
+    GITHUB_USER     = 'etendobot'
+    GITHUB_TOKEN    = credentials('github-read-package-token')
+    ACCESS_TOKEN    = credentials('access_token_github')
+    EMAIL_ADDRESS   = credentials('email_builds')
+    CONTEXT_BUILD   = 'Checking the Tomcat service in Docker'
+
+    TOMCAT_CONTAINER_NAME = "etendo-tomcat-1"
+
+    COMMIT_AUTHOR_NAME  = sh(returnStdout: true, script: "git log -1 --pretty=format:'%an'").trim()
+    COMMIT_AUTHOR_EMAIL = sh(returnStdout: true, script: "git log -1 --pretty=format:'%ae'").trim()
+
+    ETENDO_BASE_URL   = 'https://github.com/etendosoftware/etendo_base'
+    TOMCAT_MODULE_URL = 'https://github.com/etendosoftware/com.etendoerp.tomcat'
+    PIPELINES_REPO_URL = 'git@bitbucket.org:koodu_software/com.etendoerp.jenkins.pipelines.git'
+
+    JAVA_HOME       = '/usr/lib/jvm/java-17-openjdk-amd64'
+    MODULE_PACKAGE  = 'com.etendoerp.tomcat'
+    ETENDO_BASE     = 'etendo_base'
+
+    COMMIT_INPROGRESS_STATUS = 'pending'
+    COMMIT_SUCCESS_STATUS    = 'success'
+    COMMIT_FAILED_STATUS     = 'failure'
+
+    SUCCESS  = 'SUCCESS'
+    FAILED   = 'FAILED'
+    UNSTABLE = 'UNSTABLE'
+
+    NEXT_CLASSIC_VERSION = '25.3.0'
+    BASE_BRANCH_BACKPORT = "release/24.4"
+    MAIN_BRANCH          = "main"
+  }
+
+  agent { // MARK: - Agent
+    kubernetes {
+      inheritFrom 'jenkins-node-rx'
+      defaultContainer 'jnlp'
+      yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jenkins-node-pg-0
+  namespace: jenkins2025
+  labels:
+    app.kubernetes.io/name: jenkins-node-pg
+spec:
+  volumes:
+    - name: rsa-keys
+      configMap:
+        name: rsa-keys
+        defaultMode: 384
+    - name: dind-storage
+      emptyDir: {}           # local cache images for dind
+  containers:
+    - name: compiler
+      image: etendo/compiler_jenkins:1.0.7
+      env:
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+      securityContext:
+        privileged: true
+        runAsUser: 0
+      ports:
+        - name: ssh
+          containerPort: 22
+          protocol: TCP
+        - name: visualvm
+          containerPort: 8000
+          protocol: TCP
+      resources:
+        requests:
+          cpu: 1072m
+          memory: 4000Mi
+        limits:
+          cpu: 2072m
+          memory: 6500Mi
+      volumeMounts:
+        - name: rsa-keys
+          mountPath: /root/.ssh/
+      lifecycle:
+        postStart:
+          exec:
+            command:
+              - bash
+              - -lc
+              - |
+                set -e
+                apt-get update -y
+                command -v docker >/dev/null || apt-get install -y docker.io
+                apt-get install -y curl
+      imagePullPolicy: IfNotPresent
+    - name: postgres
+      image: postgres:16
+      workingDir: /home/jenkins
+      env:
+        - name: POSTGRES_PASSWORD
+          value: syspass
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      imagePullPolicy: IfNotPresent
+    - name: dind
+      image: docker:25-dind
+      securityContext:
+        privileged: true
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""            # without TLS inside the pod
+      args:
+        - --mtu=1450           # adjust if your CNI requires it
+        - --storage-driver=overlay2
+      volumeMounts:
+        - name: dind-storage
+          mountPath: /var/lib/docker
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 30
+  dnsPolicy: ClusterFirst
+  serviceAccountName: default
+  serviceAccount: default
+  securityContext: {}
+  """
+    }
+  }
+
+  stages {
+    stage('Wait for DinD') { // MARK: - Wait for DinD
+      steps {
+        container('compiler') {
+          script {
+            try {
+              echo '---------------- Waiting for DinD to be ready ----------------'
+              timeout(time: 60, unit: 'SECONDS') {
+                int i = 0
+                waitUntil {
+                  i++
+                  int rc = sh(returnStatus: true, script: 'docker version >/dev/null 2>&1')
+                  if (rc == 0) {
+                    echo "✅ DinD is ready (after ${i} checks)"
+                    return true
+                  } else {
+                    echo "⏳ Waiting for DinD... attempt ${i}"
+                    sleep 2
+                    return false
+                  }
+                }
+              }
+              currentBuild.result = SUCCESS
+            } catch (Exception e) {
+              env.ERROR_MESSAGE = "DinD Failed"
+              echo "---------------- ${env.ERROR_MESSAGE} ----------------"
+              echo "Exception occurred: " + e.toString()
+              currentBuild.result = FAILED
+              error(env.ERROR_MESSAGE)
+            }
+          }
+        }
+      }
+    }
+    stage ('Build Environment') { // MARK: - Build Environment
+      when {
+        expression { currentBuild.result == SUCCESS }
+      }
+      steps {
+        container('compiler') {
+          script {
+            try {
+              echo '---------------- Clone repository of pipelines ----------------'
+              withCredentials([sshUserPrivateKey(credentialsId: 'my-credentials', keyFileVariable: 'keyfile')]) {
+                withEnv(["GIT_SSH_COMMAND=ssh -i ${keyfile} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"]) {
+                  sh "git clone ${PIPELINES_REPO_URL} ./jenkins-pipelines"
+                }
+              }
+
+              updateBuildStatus(COMMIT_INPROGRESS_STATUS, "Starting build", MODULE_PACKAGE, ACCESS_TOKEN, GIT_COMMIT, BUILD_URL, CONTEXT_BUILD)
+
+              echo '---------------- Choice of etendo_base branch ----------------'
+              env.BASE_BRANCH = env.MAIN_BRANCH
+              if (env.GIT_BRANCH.contains("-Y") || env.GIT_BRANCH.startsWith("release")) {
+                  env.BASE_BRANCH = env.BASE_BRANCH_BACKPORT
+              }
+
+              echo '--------------- Building Etendo environment ----------------'
+              sh "git clone ${ETENDO_BASE_URL}"
+
+              sh """
+              cd ${ETENDO_BASE}
+              git checkout ${env.BASE_BRANCH}
+
+              echo "\n
+              context.name=${CONTEXT_NAME}
+              bbdd.sid=${BBDD_SID}
+              bbdd.port=${BBDD_PORT}
+              bbdd.systemUser=${BBDD_SYSTEMUSER}
+              bbdd.systemPassword=${BBDD_SYSTEMPASS}
+              bbdd.user=${BBDD_USER}
+              bbdd.password=${BBDD_PASSWORD}
+              nexusUser=${NEXUS_USER}
+              nexusPassword=${NEXUS_PASSWORD}
+              githubUser=${GITHUB_USER}
+              githubToken=${GITHUB_TOKEN}
+              allow.root=true
+              org.gradle.vfs.watch=false
+              docker_com.etendoerp.tomcat=true
+              tomcat.port=${TOMCAT_PORT}
+              org.gradle.jvmargs=-Dfile.encoding=UTF-8
+              org.gradle.daemon=false" > gradle.properties
+              """
+
+              echo '---------------- Add dependencies ----------------'
+
+              def buildGradleContent = """
+                dependencies {
+                    implementation(\"com.etendoerp.platform:etendo-core:[24.4.0,)\")
+                }
+              """
+              sh """
+              cd ${ETENDO_BASE}
+              echo '${buildGradleContent}' >> build.gradle
+              """
+              echo '---------------- Verifying Docker Containers ----------------'
+              sh '''
+                bash -lc '
+                  set -euo pipefail
+                  echo "DOCKER_HOST=${DOCKER_HOST:-<empty>}"
+                  docker version
+                  docker info
+                  docker run --rm hello-world
+                '
+              '''
+              echo '---------------- Build & Compile ----------------'
+              sh """
+                cd ${ETENDO_BASE}
+                mkdir -p modules
+                cd modules
+                git clone ${TOMCAT_MODULE_URL}.git
+                cd ${MODULE_PACKAGE}
+                git checkout ${GIT_COMMIT}
+                cd ../..
+                ./gradlew prepareConfig
+                ./gradlew setup
+                ./gradlew resources.up --info
+              """
+              def pgIp = sh(
+                script: "docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${TOMCAT_CONTAINER_NAME}",
+                returnStdout: true
+              ).trim()
+              def confFile = "${ETENDO_BASE}/gradle.properties"
+              sh """
+                cd ${ETENDO_BASE}
+                ./gradlew setup
+              """
+
+              echo '---------------- Verifying Docker Containers ----------------'
+              sleep time: 15, unit: 'SECONDS'
+              def dockerPsOutput = sh(script: 'docker ps', returnStdout: true)
+              echo "${dockerPsOutput}"
+              if (!dockerPsOutput.contains(env.TOMCAT_CONTAINER_NAME)) {
+                error("The ${TOMCAT_CONTAINER_NAME} container is not running")
+              }
+              echo "Docker Containers are running"
+
+              sh """
+                cd ${ETENDO_BASE}
+                ./gradlew install
+                ./gradlew smartbuild
+              """
+              currentBuild.result = SUCCESS
+            } catch (Exception e) {
+              env.ERROR_MESSAGE = "Build environment Failed"
+              echo "---------------- ${env.ERROR_MESSAGE} ----------------"
+              echo "Exception occurred: " + e.toString()
+              currentBuild.result = FAILED
+              error(env.ERROR_MESSAGE)
+            }
+          }
+        }
+      }
+    }
+    stage ('Check Tomcat status') { // MARK: - Check Tomcat status
+      when {
+        expression { currentBuild.result == SUCCESS }
+      }
+      steps {
+        container('compiler') {
+          script {
+            try {
+              updateBuildStatus(COMMIT_INPROGRESS_STATUS, "Checking Tomcat status", MODULE_PACKAGE, ACCESS_TOKEN, GIT_COMMIT, BUILD_URL, CONTEXT_BUILD)
+
+              echo "---------------- Checking Tomcat status... ----------------"
+              def timeout = 60 // Timeout in seconds
+              def interval = 5 // Interval between checks in seconds
+              def elapsed = 0
+              def tomcatReady = false
+              def tomcatResponse = "";
+              def url = "http://localhost:${TOMCAT_PORT}/${CONTEXT_NAME}/security/Login_FS.html"
+              while (elapsed < timeout) {
+                try {
+                  tomcatResponse = sh(
+                    script: "curl -s -o /dev/null -w \"%{http_code}\" ${url}",
+                    returnStdout: true
+                  ).trim()
+                  echo "Tomcat response code: ${tomcatResponse}"
+                } catch (e) {
+                  tomcatResponse = "000"
+                }
+
+                if (tomcatResponse == "200") {
+                  tomcatReady = true
+                  break
+                }
+
+                echo "Tomcat not ready yet. Response code: ${tomcatResponse}. Retrying in ${interval} seconds..."
+                sleep interval
+                elapsed += interval
+              }
+              if (!tomcatReady) {
+                error("Tomcat did not start within the timeout period of ${timeout} seconds.")
+              }
+              echo "Tomcat response code: ${tomcatResponse}"
+              if (tomcatResponse != "200") {
+                error("Tomcat did not respond with 200. Response code: ${tomcatResponse}")
+              }
+
+              sh """
+              cd ${ETENDO_BASE}
+              ./gradlew resources.stop
+              """
+
+              sleep time: 30, unit: 'SECONDS'
+              def dockerPsOutput = sh(script: 'docker ps', returnStdout: true)
+              echo "${dockerPsOutput}"
+              if (dockerPsOutput.contains(env.TOMCAT_CONTAINER_NAME) && !dockerPsOutput.contains("Exited")) {
+                error("The ${TOMCAT_CONTAINER_NAME} container still running")
+              }
+              currentBuild.result = SUCCESS
+            } catch (Exception e) {
+              env.ERROR_MESSAGE = "Check Tomcat status Failed"
+              echo "---------------- ${env.ERROR_MESSAGE} ----------------"
+              echo "Exception occurred: " + e.toString()
+              currentBuild.result = UNSTABLE
+              error(env.ERROR_MESSAGE)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  post { // MARK: - Post actions
+    always {
+      container('compiler') {
+        script {
+          echo '---------------- Cleaning up Etendo environment ----------------'
+          try {
+            sh """
+              cd ${ETENDO_BASE}
+              ./gradlew resources.down
+            """
+          } catch (Exception e) {
+            echo "⚠️ Cleanup failed: ${e.getMessage()}"
+          }
+        }
+      }
+    }
+
+    success {
+      container('compiler') {
+        script {
+          updateBuildStatus(COMMIT_SUCCESS_STATUS, "Successful Docker Test", MODULE_PACKAGE, ACCESS_TOKEN, GIT_COMMIT, BUILD_URL, CONTEXT_BUILD)
+        }
+      }
+    }
+
+    failure {
+      container('compiler') {
+        script {
+          updateBuildStatus(COMMIT_FAILED_STATUS, env.ERROR_MESSAGE, MODULE_PACKAGE, ACCESS_TOKEN, GIT_COMMIT, BUILD_URL, CONTEXT_BUILD)
+          sendMailNotification(EMAIL_ADDRESS, "⛔ ${env.ERROR_MESSAGE}", TOMCAT_MODULE_URL, MODULE_PACKAGE, GIT_COMMIT, COMMIT_AUTHOR_NAME, COMMIT_AUTHOR_EMAIL)
+        }
+      }
+    }
+
+    unstable {
+      container('compiler') {
+        script {
+          updateBuildStatus(COMMIT_FAILED_STATUS, env.ERROR_MESSAGE, MODULE_PACKAGE, ACCESS_TOKEN, GIT_COMMIT, BUILD_URL, CONTEXT_BUILD)
+          sendMailNotification(EMAIL_ADDRESS, env.ERROR_MESSAGE,  TOMCAT_MODULE_URL, MODULE_PACKAGE, GIT_COMMIT, COMMIT_AUTHOR_NAME, COMMIT_AUTHOR_EMAIL)
+        }
+      }
+    }
+  }
+}
