@@ -257,6 +257,7 @@ spec:
               allow.root=true
               org.gradle.vfs.watch=false
               docker_com.etendoerp.tomcat=true
+              tomcat.base.memory.mb=5120
               tomcat.port=${TOMCAT_PORT}
               org.gradle.jvmargs=-Dfile.encoding=UTF-8
               org.gradle.daemon=false" > gradle.properties
