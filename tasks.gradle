@@ -3,7 +3,7 @@ task tomcatDeploy {
     dependsOn "tomcatStart"
     doLast {
         def contextName = project.property("context.name")
-        def destUrl = isBBDDEnabled ? "db" : "host.docker.internal"
+        def destUrl = isBBDDEnabled ? "db" : hostURL()
         def port = isBBDDEnabled ? "5432" : project.property("bbdd.port")
         // Update Openbravo.properties
         def propertiesFile = file('WebContent/WEB-INF/Openbravo.properties')
@@ -113,28 +113,28 @@ task "tomcat.env.file" {
  * during the build process, depending on the state of `isTomcatEnabled`.
  */
 afterEvaluate {
-    if (!ext.has("isTomcatEnabled")) {
-        return
+  if (!ext.has("isTomcatEnabled")) {
+    return
+  }
+  if (isTomcatEnabled) {
+    tasks.named("smartbuild").configure { task ->
+      task.finalizedBy("tomcatDeploy")
     }
-    if (isTomcatEnabled) {
-        tasks.named("smartbuild").configure { task ->
-            task.finalizedBy("tomcatDeploy")
-        }
-        tasks.named("compile.complete").configure { task ->
-            task.dependsOn("tomcatDeleteWar")
-        }
-        tasks.named("compile.complete.deploy").configure { task ->
-            task.dependsOn("tomcatDeleteWar")
-            task.finalizedBy("tomcatDeploy")
-        }
-        tasks.named("update.database").configure { task ->
-            task.dependsOn("tomcatStop")
-        }
-        tasks.named("install").configure { task ->
-            task.dependsOn("tomcatStop")
-        }
-        tasks.named("generateEnvFile").configure { task ->
-            task.finalizedBy("tomcat.env.file")
-        }
+    tasks.named("compile.complete").configure { task ->
+      task.dependsOn("tomcatDeleteWar")
     }
+    tasks.named("compile.complete.deploy").configure { task ->
+      task.dependsOn("tomcatDeleteWar")
+      task.finalizedBy("tomcatDeploy")
+    }
+    tasks.named("update.database").configure { task ->
+      task.dependsOn("tomcatStop")
+    }
+    tasks.named("install").configure { task ->
+      task.dependsOn("tomcatStop")
+    }
+    tasks.named("generateEnvFile").configure { task ->
+      task.finalizedBy("tomcat.env.file")
+    }
+  }
 }
