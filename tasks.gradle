@@ -80,18 +80,22 @@ task "tomcat.env.file" {
             writer.write("TOMCAT_DEBUG_PORT=${tomcatDebugPort}\n")
         }
         // Tomcat Resource Limits
-        def TOMCAT_BASE_MEM_MB = getTypedProp("tomcat.base.memory.mb") ?: 256
-        def TOMCAT_BASE_CPU = getTypedProp("tomcat.base.cpu") ?: 1.0
-
         def tomcatServiceFactors = [
-            TOMCAT: [mem: 2.0, cpu: 1.0] // Default 512Mb - 1 Cpu
+            TOMCAT: [mem: 4.0, cpu: 1.0] // Default 1024Mb - 1 Cpu
         ]
-        tomcatServiceFactors.each { service, factors ->
-            def memMB = (TOMCAT_BASE_MEM_MB * factors.mem).toInteger()
-            def cpu = ((TOMCAT_BASE_CPU * factors.cpu) as BigDecimal).setScale(3, BigDecimal.ROUND_HALF_UP).toString()
-
-            upsertEnvProperty("BASE_${service}_MEMORY_LIMIT", "${memMB}M")
-            upsertEnvProperty("BASE_${service}_CPU_LIMIT", "${cpu}")
+        def TOMCAT_BASE_MEM_MB = getTypedProp("tomcat.base.memory.mb")
+        if (TOMCAT_BASE_MEM_MB != null) {
+            tomcatServiceFactors.each { service, factors ->
+                def memMB = (TOMCAT_BASE_MEM_MB * factors.mem).toInteger()
+                upsertEnvProperty("BASE_${service}_MEMORY_LIMIT", "${memMB}M")
+            }
+        }
+        def TOMCAT_BASE_CPU = getTypedProp("tomcat.base.cpu")
+        if (TOMCAT_BASE_CPU != null) {
+            tomcatServiceFactors.each { service, factors ->
+                def cpu = ((TOMCAT_BASE_CPU * factors.cpu) as BigDecimal).setScale(1, BigDecimal.ROUND_HALF_UP).toString()
+                upsertEnvProperty("BASE_${service}_CPU_LIMIT", "${cpu}")
+            }
         }
     }
 }
