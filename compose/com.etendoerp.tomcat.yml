@@ -21,7 +21,7 @@ services:
       resources:
         limits:
           cpus: "${TOMCAT_CPU_LIMIT:-${BASE_TOMCAT_CPU_LIMIT:-1}}"
-          memory: "${TOMCAT_MEMORY_LIMIT:-${BASE_TOMCAT_MEMORY_LIMIT:-256M}}"
+          memory: "${TOMCAT_MEMORY_LIMIT:-${BASE_TOMCAT_MEMORY_LIMIT:-1024M}}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${TOMCAT_PORT}/${CONTEXT_NAME}/security/Login"]
       interval: 10s
