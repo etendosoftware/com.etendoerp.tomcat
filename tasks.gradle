@@ -38,6 +38,11 @@ task copyWarToVolume {
         indexFile.write(indexHtmlContent)
 
         executeDockerComposeCommand("cp ${composeRootDir} tomcat:/usr/local/tomcat/webapps/ROOT")
+        try {
+            executeDockerComposeCommand("up -d --force-recreate tomcat")
+        } catch (Exception e) {
+            logger.warn("Could not restart Tomcat container: ${e.message}")
+        }
     }
 }
 
